@@ -332,12 +332,21 @@ ipcMain.handle('TOGGLE_THEME', (event, mode) => {
   return nativeTheme.shouldUseDarkColors
 })
 
-const fs = require('fs')
+const fs = require('fs'),
+      fm = require('front-matter')
+
+const parseMarkdown = (md) => {
+  const content = fm(md)
+  return {
+    ...content.attributes,
+    content: content.body
+  }
+}
 
 ipcMain.handle('FETCH_FILE', async (event, args) => {
   const [year, fileName] = args
   const dataPath = getFilePath(year)
-  const filePath = `${dataPath}/${fileName}.json`
+  const filePath = `${dataPath}/${fileName}.md`
   let file
 
   // create the file if it does not exist yet
@@ -345,12 +354,12 @@ ipcMain.handle('FETCH_FILE', async (event, args) => {
     file = fs.promises.mkdir(dataPath, { recursive: true }).then(() => {
       return fs.promises.writeFile(filePath, getDefaultData()).then(() => {
         return fs.promises.readFile(filePath, 'utf-8').then((data) => {
-          return JSON.parse(data)
+          return parseMarkdown(data)
         })
       })
     })
   } else {
-    file = fs.promises.readFile(filePath, 'utf-8').then(data => JSON.parse(data))
+    file = fs.promises.readFile(filePath, 'utf-8').then(data => parseMarkdown(data))
   }
 
   // return the file
@@ -403,7 +412,7 @@ const retrieveIndex = async () => {
 ipcMain.handle('SAVE_FILE', (event, args) => {
   const [year, fileName, content, rating] = args
   const dataPath = getFilePath(year, fileName)
-  const filePath = `${dataPath}/${fileName}.json`
+  const filePath = `${dataPath}/${fileName}.md`
   
   searchIndex.update(fileName, {
     date: fileName, 
@@ -412,10 +421,7 @@ ipcMain.handle('SAVE_FILE', (event, args) => {
 
   fs.promises.writeFile(
     filePath,
-    JSON.stringify({
-      content: content,
-      rating: rating
-    })
+    `---\nrating: ${rating}\n---\n${content}\n`
   )
   
   exportIndex()
@@ -429,10 +435,10 @@ ipcMain.handle('SEARCH', async (event, search) => {
     let dataResult = []
 
     for (const date of dates) {
-      await fs.promises.readFile(`${getFilePath(date.substring(0,4))}/${date}.json`, 'utf-8').then((data) => {
+      await fs.promises.readFile(`${getFilePath(date.substring(0,4))}/${date}.md`, 'utf-8').then((data) => {
+        const { content, rating } = parseMarkdown(data)
         dataResult.push({
-          date: date,
-          ...JSON.parse(data)
+          date, content, rating
         })
       })
     }
@@ -490,11 +496,13 @@ const repairSearchDatabase = async () => {
 
   await Promise.all(years.map(getYearFolderFiles))
     .then((yearFiles) => yearFiles.flat())
-    .then((dirtyFiles) => dirtyFiles.filter(file => file.match(/^(.*\.json$).*$/)))
+    .then((dirtyFiles) => dirtyFiles.filter(file => file.match(/^(.*\.md$).*$/)))
     .then((cleanFiles) =>
       cleanFiles.map((file) => {
+        const md = fs.readFileSync(`${dataPath}/${file}`, "utf8")
+        const { content } = parseMarkdown(md)
         return {
-          data: JSON.parse(fs.readFileSync(`${dataPath}/${file}`, "utf8")),
+          data: content,
           date: file
         }
       })
@@ -533,8 +541,5 @@ const getFilePath = (year) => {
 }
 
 const getDefaultData = () => {
-  return JSON.stringify({
-    content: '',
-    rating: 0
-  })
+  return `---\nrating: 0\n---\n`
 }

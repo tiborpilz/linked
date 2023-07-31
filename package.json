@@ -54,6 +54,7 @@
     "electron-store": "8.0.1",
     "electron-updater": "4.6.5",
     "flexsearch": "0.7.21",
+    "front-matter": "^4.0.2",
     "fs-extra": "^10.0.0",
     "highlight.js": "10.6.0",
     "lodash": "^4.17.21",
